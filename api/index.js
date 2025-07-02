@@ -4,56 +4,45 @@ import axios from 'axios';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const TARGET_URL = 'http://localhost:5678/webhook-test/afe4145f-5668-44c5-b815-0b309b9a548b'; // Substitua pela URL de destino
 
-// Middleware para parsear JSON
+const TARGET_URL = process.env.TARGET_URL || 'http://localhost:5678/webhook-test/afe4145f-5668-44c5-b815-0b309b9a548b';
+
 app.use(bodyParser.json());
 
-// Rota do webhook que recebe POST
-app.post('/webhook', async (req, res) => {
+async function handleWebhook(req, res) {
   try {
     console.log('Recebendo dados do webhook:', req.body);
-
+    
     const response = await axios.post(TARGET_URL, req.body, {
       headers: {
         'Content-Type': 'application/json',
-        // Adicione headers adicionais se necessário
-        // 'Authorization': 'Bearer seu-token'
+        ...(req.headers.authorization && { Authorization: req.headers.authorization })
       }
     });
     
     console.log('Dados encaminhados com sucesso:', response.data);
-    res.status(200).json({ success: true, message: 'Webhook processado' });
+    return res.status(200).json({ success: true, data: response.data });
   } catch (error) {
-    console.error('Erro ao processar webhook:', error.message);
-    res.status(500).json({ success: false, message: 'Erro ao processar webhook' });
-  }
-});
-
-app.post('/webhook-zapi', async (req, res) => {
-  try {
-    console.log('Recebendo dados do webhook:', req.body);
-
-    const response = await axios.post(TARGET_URL, req.body, {
-      headers: {
-        'Content-Type': 'application/json',
-        // Adicione headers adicionais se necessário
-        // 'Authorization': 'Bearer seu-token'
-      }
+    console.error('Erro ao processar webhook:', error);
+    return res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.message,
+      ...(error.response?.data && { details: error.response.data })
     });
-    
-    console.log('Dados encaminhados com sucesso:', response.data);
-    res.status(200).json({ success: true, message: 'Webhook processado' });
-  } catch (error) {
-    console.error('Erro ao processar webhook:', error.message);
-    res.status(500).json({ success: false, message: 'Erro ao processar webhook' });
   }
-});
+}
 
-app.get('/', (req, res) => {
-  res.send('Webhook Node.js está funcionando!');
-});
 
-app.listen(PORT, () => {
-  console.log(`Servidor webhook rodando na porta ${PORT}`);
-});
+app.post('/webhook', handleWebhook);
+app.post('/webhook-zapi', handleWebhook);
+app.get('/', (req, res) => res.send('Webhook Node.js está funcionando!'));
+
+
+export default app;
+
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Servidor local rodando na porta ${PORT}`);
+  });
+}
